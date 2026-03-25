@@ -7,14 +7,18 @@ data:
 model:
   hidden_dim: 128
   num_layers: 4
+  edge_attr_dim: 4
   dropout: 0.0
 
 training:
   lr: 1e-3
   batch_size: 32
   epochs: 300
+  patience: 20
+  delta: 1e-4
   scheduler: cosine
 
 experiment:
   name: main_comparison
-  output_dir: ./results
+  path_weights: models
+  output_dir: runs
