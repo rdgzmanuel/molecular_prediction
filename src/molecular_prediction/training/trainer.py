@@ -129,16 +129,17 @@ class Trainer:
         losses: list[float] = []
         n_batches: int = 0
 
-        for batch in loader:
-            batch = batch.to(self.device)
+        with torch.no_grad():
+            for batch in loader:
+                batch = batch.to(self.device)
 
-            output: torch.Tensor = self.model(batch)
+                output: torch.Tensor = self.model(batch)
 
-            targets: torch.Tensor = batch.y[:, self.target_indices]
-            loss: torch.Tensor = self.criterion(output, targets)
+                targets: torch.Tensor = batch.y[:, self.target_indices]
+                loss: torch.Tensor = self.criterion(output, targets)
 
-            losses.append(loss.item())
-            n_batches += 1
+                losses.append(loss.item())
+                n_batches += 1
 
         return sum(losses) / n_batches
 
@@ -157,16 +158,25 @@ class Trainer:
             avg_train_loss: float = self._train_epoch()
             avg_val_loss: float = self._evaluate(self.val_loader)
 
-            self.early_stopping(avg_val_loss, self.model, self.path_weights)
-
-            if self.early_stopping.apply_early_stop:
-                break
+            print(
+                f"Epoch {epoch + 1}/{self.epochs} — "
+                f"Train Loss: {avg_train_loss:.4f} — "
+                f"Val Loss: {avg_val_loss:.4f}"
+            )
 
             results["train_loss"].append(avg_train_loss)
             results["val_loss"].append(avg_val_loss)
 
             self.writer.add_scalar("Loss/train", avg_train_loss, epoch)
             self.writer.add_scalar("Loss/val", avg_val_loss, epoch)
+
+            self.scheduler.step()
+
+            self.early_stopping(avg_val_loss, self.model, self.path_weights)
+
+            if self.early_stopping.apply_early_stop:
+                print(f"Early stopping triggered at epoch {epoch + 1}.")
+                break
 
         if not self.early_stopping.apply_early_stop:
             save_parameters(self.model, self.path_weights)

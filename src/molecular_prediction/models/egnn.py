@@ -38,6 +38,38 @@ class EGNNConv(MessagePassing):
             nn.Linear(hidden_dim, hidden_dim),
         )
 
+    def _compute_edge_messages(
+        self,
+        h: torch.Tensor,
+        pos: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        """Compute phi_e messages for a given set of edges."""
+        h_i: torch.Tensor = h[edge_index[0]]
+        h_j: torch.Tensor = h[edge_index[1]]
+        pos_i: torch.Tensor = pos[edge_index[0]]
+        pos_j: torch.Tensor = pos[edge_index[1]]
+
+        dist_sq: torch.Tensor = ((pos_i - pos_j) ** 2).sum(dim=1, keepdim=True)
+        inputs: torch.Tensor = torch.cat([h_i, h_j, dist_sq, edge_attr], dim=1)
+        return self.phi_e(inputs)
+
+    def _compute_coord_update(
+        self,
+        h: torch.Tensor,
+        pos: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Compute equivariant coordinate displacement."""
+        messages: torch.Tensor = self._compute_edge_messages(
+            h, pos, edge_index, edge_attr
+        )
+        direction_vectors: torch.Tensor = pos[edge_index[0]] - pos[edge_index[1]]
+        scaled: torch.Tensor = direction_vectors * self.phi_x(messages)
+        return scatter(scaled, edge_index[0], dim=0, dim_size=pos.size(0), reduce="sum")
+
     def forward(
         self,
         h: torch.Tensor,
@@ -56,15 +88,18 @@ class EGNNConv(MessagePassing):
         Returns:
             Tuple of (updated h, updated pos), both with same shape as input.
         """
-        h = self.propagate(edge_index, h=h, pos=pos, edge_attr=edge_attr)
-
-        direction_vectors: torch.Tensor = pos[edge_index[0]] - pos[edge_index[1]]
-        scaled: torch.Tensor = direction_vectors * self.phi_x(self._messages)
-        pos = pos + scatter(
-            scaled, edge_index[0], dim=0, dim_size=pos.size(0), reduce="sum"
+        # First pass: compute edge messages and aggregate for node update
+        h_updated: torch.Tensor = self.propagate(
+            edge_index, h=h, pos=pos, edge_attr=edge_attr
         )
 
-        return h, pos
+        # Second pass: compute coordinate displacements
+        coord_update: torch.Tensor = self._compute_coord_update(
+            h, pos, edge_index, edge_attr
+        )
+        pos_updated: torch.Tensor = pos + coord_update
+
+        return h_updated, pos_updated
 
     def message(
         self,
@@ -88,8 +123,7 @@ class EGNNConv(MessagePassing):
         """
         dist_sq: torch.Tensor = ((pos_i - pos_j) ** 2).sum(dim=1, keepdim=True)
         inputs: torch.Tensor = torch.cat([h_i, h_j, dist_sq, edge_attr], dim=1)
-        self._messages: torch.Tensor = self.phi_e(inputs)
-        return self._messages
+        return self.phi_e(inputs)
 
     def update(self, aggr_out: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
         """Update node features using phi_h.
