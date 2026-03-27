@@ -3,8 +3,8 @@
 # Entry point for the molecular property prediction experiments.
 #
 # Usage:
-#   python main.py --experiment main_comparison --config configs/defaults.yaml
-#   python main.py --experiment noise_ablation  --config configs/defaults.yaml
+#   python main.py --experiment main_comparison
+#   python main.py --experiment noise_ablation
 
 import argparse
 

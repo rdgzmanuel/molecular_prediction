@@ -12,7 +12,6 @@ from torch_geometric.loader import DataLoader
 
 from molecular_prediction.models.base import BaseGNN
 from molecular_prediction.training.early_stopping import EarlyStopping
-from molecular_prediction.training.metrics import mae_per_target
 from molecular_prediction.training.utils import save_parameters
 
 
@@ -127,7 +126,7 @@ class Trainer:
         """
         self.model.eval()
         self.model.to(self.device)
-        maes: list[float] = []
+        losses: list[float] = []
         n_batches: int = 0
 
         for batch in loader:
@@ -136,12 +135,12 @@ class Trainer:
             output: torch.Tensor = self.model(batch)
 
             targets: torch.Tensor = batch.y[:, self.target_indices]
-            loss: torch.Tensor = mae_per_target(output, targets)
+            loss: torch.Tensor = self.criterion(output, targets)
 
-            maes.append(loss.item())
+            losses.append(loss.item())
             n_batches += 1
 
-        return sum(maes) / n_batches
+        return sum(losses) / n_batches
 
     def fit(self) -> dict[str, list[float]]:
         """Run the full training loop for all epochs.

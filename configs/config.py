@@ -2,7 +2,7 @@
 Configuration of the project.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 
@@ -52,9 +52,7 @@ class TrainingConfig:
     epochs: int = 1
     patience: int = 20
     delta: float = 1e-4
-    scheduler: torch.optim.lr_scheduler.CosineAnnealingLR = (
-        torch.optim.lr_scheduler.CosineAnnealingLR
-    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -73,11 +71,11 @@ class Config:
     Main configuration class.
     """
 
-    paths: PathsConfig = PathsConfig()
-    data: DataConfig = DataConfig()
-    model: ModelConfig = ModelConfig()
-    training: TrainingConfig = TrainingConfig()
-    experiment: ExperimentConfig = ExperimentConfig()
+    paths: PathsConfig = field(default_factory=PathsConfig)
+    data: DataConfig = field(default_factory=DataConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    experiment: ExperimentConfig = field(default_factory=ExperimentConfig)
 
 
 config: Config = Config()
