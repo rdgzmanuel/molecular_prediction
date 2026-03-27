@@ -10,14 +10,14 @@ import argparse
 
 import torch
 
-from molecular_prediction.data.dataset import load_config
-from molecular_prediction.experiments.main_comparison import (
+from src.molecular_prediction.data.dataset import load_config
+from src.molecular_prediction.experiments.main_comparison import (
     plot_test_mae,
     plot_training_curves,
     run_comparison,
     save_results,
 )
-from molecular_prediction.experiments.noise_ablation import (
+from src.molecular_prediction.experiments.noise_ablation import (
     plot_ablation_curves,
     run_noise_ablation,
     save_ablation_results,
