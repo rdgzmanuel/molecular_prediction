@@ -49,6 +49,7 @@ class Trainer:
         delta: float,
         epochs: int,
         device: str,
+        target_indices: list[int],
         path_weights: str = "models",
         output_dir: str = "runs",
     ) -> None:
@@ -72,6 +73,8 @@ class Trainer:
         self.val_loader: DataLoader = DataLoader(
             self.val_dataset, batch_size=batch_size, shuffle=True
         )
+
+        self.target_indices: list[int] = target_indices
 
         self.optimizer: Adam = Adam(self.model.parameters(), lr=self.lr)
         self.criterion: nn.L1Loss = nn.L1Loss()
@@ -102,8 +105,9 @@ class Trainer:
 
             batch = batch.to(self.device)
             output: torch.Tensor = self.model(batch)
+            targets: torch.Tensor = batch.y[:, self.target_indices]
+            loss: torch.Tensor = self.criterion(output, targets)
 
-            loss: torch.Tensor = self.criterion(output, batch.y)
             loss.backward()
             self.optimizer.step()
 
@@ -131,9 +135,10 @@ class Trainer:
 
             output: torch.Tensor = self.model(batch)
 
-            loss: torch.Tensor = mae_per_target(output, batch.y)
+            targets: torch.Tensor = batch.y[:, self.target_indices]
+            loss: torch.Tensor = mae_per_target(output, targets)
 
-            maes.append(loss)
+            maes.append(loss.item())
             n_batches += 1
 
         return sum(maes) / n_batches

@@ -9,6 +9,7 @@ dependencies = [
     "torch-geometric",
     "pyyaml",
     "tensorboard",
+    "matplotlib>=3.10.8",
 ]
 
 [dependency-groups]
