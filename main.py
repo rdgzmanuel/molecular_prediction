@@ -82,11 +82,10 @@ def run_main_comparison(config: Config, device: str) -> None:
         config: Full experiment config dict.
         device: PyTorch device string.
     """
-    output_dir: str = config.paths.output_dir
     results: dict = run_comparison(config, device)
-    save_results(results, output_dir)
-    plot_training_curves(results, output_dir)
-    plot_test_mae(results, output_dir)
+    save_results(results, config.paths.results_dir)
+    plot_training_curves(results, config.paths.images_dir)
+    plot_test_mae(results, config.paths.images_dir)
 
 
 def run_noise_ablation_experiment(config: Config, device: str) -> None:
@@ -99,10 +98,9 @@ def run_noise_ablation_experiment(config: Config, device: str) -> None:
         config: Full experiment config dict.
         device: PyTorch device string.
     """
-    output_dir: str = config.paths.output_dir
     results: dict[str, list[dict]] = run_noise_ablation(config, device)
-    save_ablation_results(results, output_dir)
-    plot_ablation_curves(results, output_dir)
+    save_ablation_results(results, config.paths.results_dir)
+    plot_ablation_curves(results, config.paths.images_dir)
 
 
 def main() -> None:

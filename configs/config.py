@@ -16,6 +16,8 @@ class PathsConfig:
     path_data: str = "./data/raw"
     path_weights: str = "models"
     output_dir: str = "runs"
+    images_dir: str = "images"
+    results_dir: str = "results"
 
 
 @dataclass
