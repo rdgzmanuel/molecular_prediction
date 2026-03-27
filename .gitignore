@@ -2,6 +2,9 @@
 runs/
 data/
 .claude/
+models/
+images/
+results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

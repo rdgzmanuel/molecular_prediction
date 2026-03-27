@@ -1,6 +1,7 @@
 # src/molecular_prediction/models/base.py
 
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -34,7 +35,7 @@ class BaseGNN(ABC, nn.Module):
         self,
         h: torch.Tensor,
         edge_index: torch.Tensor,
-        edge_attr: torch.Tensor | None = None,
+        edge_attr: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Run one message passing step and return updated node features.
 
@@ -79,7 +80,7 @@ class BaseGNN(ABC, nn.Module):
         """
         h: torch.Tensor = self.node_embedding(data.x)
         edge_index: torch.Tensor = data.edge_index
-        edge_attr: torch.Tensor | None = data.edge_attr
+        edge_attr: Optional[torch.Tensor] = data.edge_attr
 
         h = self.message_pass(h, edge_index, edge_attr)
         graph_repr = global_add_pool(h, data.batch)

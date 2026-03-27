@@ -11,23 +11,24 @@ import os
 
 import matplotlib.pyplot as plt
 import torch
+from torch import nn
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
-from molecular_prediction.data.dataset import load_splits
-from molecular_prediction.data.transforms import AddGaussianNoise
-from molecular_prediction.experiments.main_comparison import (
+from configs.config import Config
+from src.molecular_prediction.data.dataset import load_splits
+from src.molecular_prediction.data.transforms import AddGaussianNoise
+from src.molecular_prediction.experiments.main_comparison import (
     MODEL_NAMES,
     build_model,
 )
-from molecular_prediction.models.base import BaseGNN
-from molecular_prediction.training.metrics import mae_per_target
+from src.molecular_prediction.models.base import BaseGNN
 
 # Noise levels (sigma) to sweep over
 DEFAULT_SIGMA_VALUES: list[float] = [0.0, 0.1, 0.25, 0.5, 1.0]
 
 
-def load_model(model_name: str, config: dict) -> BaseGNN:
+def load_model(model_name: str, config: Config) -> BaseGNN:
     """Load a pretrained model from its checkpoint file.
 
     The checkpoint path is resolved as:
@@ -44,7 +45,7 @@ def load_model(model_name: str, config: dict) -> BaseGNN:
     """
     model: BaseGNN = build_model(model_name, config)
 
-    path_weights: str = config["experiment"].get("path_weights", "models")
+    path_weights: str = config.paths.path_weights
     checkpoint_path: str = os.path.join(path_weights, f"{model_name}.pt")
 
     state_dict: dict = torch.load(
@@ -89,7 +90,7 @@ def evaluate_model_under_noise(
     model: BaseGNN,
     test_dataset: Dataset,
     sigma: float,
-    config: dict,
+    config: Config,
     device: str,
 ) -> dict:
     """Evaluate a single pretrained model on a noisy test set.
@@ -107,7 +108,8 @@ def evaluate_model_under_noise(
             'test_mae'  (float) – mean MAE over all targets
     """
     noisy_dataset = apply_noise_to_dataset(test_dataset, sigma)
-    batch_size: int = config["training"]["batch_size"]
+    batch_size: int = config.training.batch_size
+    target_indices: list[int] = config.data.target_indices
     loader: DataLoader = DataLoader(noisy_dataset, batch_size=batch_size)
 
     model.to(device)
@@ -115,13 +117,15 @@ def evaluate_model_under_noise(
 
     maes: list[float] = []
     n_batches: int = 0
+    criterion: nn.L1Loss = nn.L1Loss()
 
     with torch.no_grad():
         for batch in loader:
             batch = batch.to(device)
             output: torch.Tensor = model(batch)
-            loss: float = mae_per_target(output, batch.y)
-            maes.append(loss)
+            targets: torch.Tensor = batch.y[:, target_indices]
+            loss: torch.Tensor = criterion(output, targets)
+            maes.append(loss.item())
             n_batches += 1
 
     mean_mae: float = sum(maes) / n_batches
@@ -134,7 +138,7 @@ def evaluate_model_under_noise(
 
 def run_noise_ablation_for_model(
     model_name: str,
-    config: dict,
+    config: Config,
     test_dataset: Dataset,
     sigma_values: list[float],
     device: str,
@@ -169,7 +173,7 @@ def run_noise_ablation_for_model(
 
 
 def run_noise_ablation(
-    config: dict,
+    config: Config,
     device: str,
     sigma_values: list[float] = DEFAULT_SIGMA_VALUES,
 ) -> dict[str, list[dict]]:

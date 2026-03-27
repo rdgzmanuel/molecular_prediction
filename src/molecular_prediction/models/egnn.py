@@ -1,5 +1,7 @@
 # src/molecular_prediction/models/egnn.py
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
@@ -41,7 +43,7 @@ class EGNNConv(MessagePassing):
         h: torch.Tensor,
         pos: torch.Tensor,
         edge_index: torch.Tensor,
-        edge_attr: torch.Tensor | None = None,
+        edge_attr: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Run one EGNN layer updating both node features and coordinates.
 
@@ -70,7 +72,7 @@ class EGNNConv(MessagePassing):
         h_j: torch.Tensor,
         pos_i: torch.Tensor,
         pos_j: torch.Tensor,
-        edge_attr: torch.Tensor | None = None,
+        edge_attr: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Compute messages m_ij using phi_e.
 
@@ -133,7 +135,7 @@ class EGNN(BaseGNN):
         self,
         h: torch.Tensor,
         edge_index: torch.Tensor,
-        edge_attr: torch.Tensor | None = None,
+        edge_attr: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Not used — EGNN overrides forward directly."""
         raise NotImplementedError("EGNN overrides forward, message_pass is not called.")
@@ -151,7 +153,7 @@ class EGNN(BaseGNN):
         h: torch.Tensor = self.node_embedding(data.x)
         pos: torch.Tensor = data.pos
         edge_index: torch.Tensor = data.edge_index
-        edge_attr: torch.Tensor | None = data.edge_attr
+        edge_attr: Optional[torch.Tensor] = data.edge_attr
 
         for layer in self.layers:
             h, pos = layer(h, pos, edge_index, edge_attr)

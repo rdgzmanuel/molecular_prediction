@@ -3,14 +3,14 @@
 # Entry point for the molecular property prediction experiments.
 #
 # Usage:
-#   python main.py --experiment main_comparison --config configs/defaults.yaml
-#   python main.py --experiment noise_ablation  --config configs/defaults.yaml
+#   python main.py --experiment main_comparison
+#   python main.py --experiment noise_ablation
 
 import argparse
 
 import torch
 
-from src.molecular_prediction.data.dataset import load_config
+from configs.config import Config
 from src.molecular_prediction.experiments.main_comparison import (
     plot_test_mae,
     plot_training_curves,
@@ -35,12 +35,6 @@ def parse_args() -> argparse.Namespace:
     """
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Molecular property prediction experiments on QM9."
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="configs/defaults.yaml",
-        help="Path to the YAML configuration file.",
     )
     parser.add_argument(
         "--experiment",
@@ -78,7 +72,7 @@ def select_device(requested: str) -> str:
     return "cpu"
 
 
-def run_main_comparison(config: dict, device: str) -> None:
+def run_main_comparison(config: Config, device: str) -> None:
     """Orchestrate the main model-comparison experiment.
 
     Calls run_comparison(), then save_results(), plot_training_curves(),
@@ -88,14 +82,13 @@ def run_main_comparison(config: dict, device: str) -> None:
         config: Full experiment config dict.
         device: PyTorch device string.
     """
-    output_dir: str = config["experiment"]["output_dir"]
     results: dict = run_comparison(config, device)
-    save_results(results, output_dir)
-    plot_training_curves(results, output_dir)
-    plot_test_mae(results, output_dir)
+    save_results(results, config.paths.results_dir)
+    plot_training_curves(results, config.paths.images_dir)
+    plot_test_mae(results, config.paths.images_dir)
 
 
-def run_noise_ablation_experiment(config: dict, device: str) -> None:
+def run_noise_ablation_experiment(config: Config, device: str) -> None:
     """Orchestrate the noise-ablation experiment.
 
     Calls run_noise_ablation(), then save_ablation_results() and
@@ -105,20 +98,18 @@ def run_noise_ablation_experiment(config: dict, device: str) -> None:
         config: Full experiment config dict.
         device: PyTorch device string.
     """
-    output_dir: str = config["experiment"]["output_dir"]
     results: dict[str, list[dict]] = run_noise_ablation(config, device)
-    save_ablation_results(results, output_dir)
-    plot_ablation_curves(results, output_dir)
+    save_ablation_results(results, config.paths.results_dir)
+    plot_ablation_curves(results, config.paths.images_dir)
 
 
 def main() -> None:
     """Parse arguments, load config, and dispatch to the chosen experiment."""
     args: argparse.Namespace = parse_args()
-    config: dict = load_config(args.config)
+    config: Config = Config()
     device: str = select_device(args.device)
 
     print(f"Experiment: {args.experiment}")
-    print(f"Config:     {args.config}")
     print(f"Device:     {device}")
 
     if args.experiment == "main_comparison":

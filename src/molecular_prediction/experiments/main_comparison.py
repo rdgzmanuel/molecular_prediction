@@ -6,18 +6,20 @@ import os
 import matplotlib.pyplot as plt
 from torch_geometric.data import Dataset
 
-from molecular_prediction.models.base import BaseGNN
-from molecular_prediction.models.egnn import EGNN
-from molecular_prediction.models.gin import GIN
-from molecular_prediction.models.gin_dist import GINDist
-from molecular_prediction.training.trainer import Trainer
+from configs.config import Config
+from src.molecular_prediction.data.dataset import load_splits
+from src.molecular_prediction.models.base import BaseGNN
+from src.molecular_prediction.models.egnn import EGNN
+from src.molecular_prediction.models.gin import GIN
+from src.molecular_prediction.models.gin_dist import GINDist
+from src.molecular_prediction.training.trainer import Trainer
 
 # QM9 target names at indices [0, 1, 4, 11]
 TARGET_NAMES: list[str] = ["mu", "alpha", "gap", "Cv"]
 MODEL_NAMES: list[str] = ["GIN", "GINDist", "EGNN"]
 
 
-def build_model(model_name: str, config: dict) -> BaseGNN:
+def build_model(model_name: str, config: Config) -> BaseGNN:
     """Instantiate a model by name using the config hyperparameters.
 
     Args:
@@ -30,27 +32,26 @@ def build_model(model_name: str, config: dict) -> BaseGNN:
     assert model_name in MODEL_NAMES, f"Invalid model name: {model_name}"
 
     num_targets: int = len(TARGET_NAMES)
-    model_cfg: dict = config["model"]
 
     if model_name == "GIN":
         model: BaseGNN = GIN(
-            hidden_dim=model_cfg["hidden_dim"],
-            num_layers=model_cfg["num_layers"],
+            hidden_dim=config.model.hidden_dim,
+            num_layers=config.model.num_layers,
             num_targets=num_targets,
         )
     elif model_name == "GINDist":
         model = GINDist(
-            hidden_dim=model_cfg["hidden_dim"],
-            num_layers=model_cfg["num_layers"],
+            hidden_dim=config.model.hidden_dim,
+            num_layers=config.model.num_layers,
             num_targets=num_targets,
-            edge_attr_dim=model_cfg["edge_attr_dim"],
+            edge_attr_dim=config.model.edge_attr_dim,
         )
     else:
         model = EGNN(
-            hidden_dim=model_cfg["hidden_dim"],
-            num_layers=model_cfg["num_layers"],
+            hidden_dim=config.model.hidden_dim,
+            num_layers=config.model.num_layers,
             num_targets=num_targets,
-            edge_attr_dim=model_cfg["edge_attr_dim"],
+            edge_attr_dim=config.model.edge_attr_dim,
         )
 
     return model
@@ -59,7 +60,7 @@ def build_model(model_name: str, config: dict) -> BaseGNN:
 def build_trainer(
     model: BaseGNN,
     model_name: str,
-    config: dict,
+    config: Config,
     train_dataset: Dataset,
     val_dataset: Dataset,
     device: str,
@@ -77,30 +78,27 @@ def build_trainer(
     Returns:
         Configured Trainer instance.
     """
-    training_cfg: dict = config["training"]
-    experiment_cfg: dict = config["experiment"]
 
-    trainer: Trainer = Trainer(
+    return Trainer(
         model=model,
         model_name=model_name,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
-        lr=training_cfg["lr"],
-        batch_size=training_cfg["batch_size"],
-        patience=training_cfg["patience"],
-        delta=training_cfg["delta"],
-        epochs=training_cfg["epochs"],
+        lr=config.training.lr,
+        batch_size=config.training.batch_size,
+        patience=config.training.patience,
+        delta=config.training.delta,
+        epochs=config.training.epochs,
         device=device,
-        path_weights=experiment_cfg.get("path_weights", "models"),
-        output_dir=experiment_cfg.get("output_dir", "runs"),
+        target_indices=config.data.target_indices,
+        path_weights=config.paths.path_weights,
+        output_dir=config.paths.output_dir,
     )
-
-    return trainer
 
 
 def run_single_model(
     model_name: str,
-    config: dict,
+    config: Config,
     train_dataset: Dataset,
     val_dataset: Dataset,
     test_dataset: Dataset,
@@ -139,7 +137,7 @@ def run_single_model(
 
 
 def run_comparison(
-    config: dict,
+    config: Config,
     device: str,
 ) -> dict[str, dict]:
     """Run the full three-model comparison experiment.
@@ -154,7 +152,6 @@ def run_comparison(
     Returns:
         Dict mapping model name -> results dict (see run_single_model).
     """
-    from molecular_prediction.data.dataset import load_splits
 
     train_dataset: Dataset
     val_dataset: Dataset
