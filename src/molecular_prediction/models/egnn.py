@@ -8,7 +8,7 @@ from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, global_add_pool
 from torch_geometric.utils import scatter
 
-from molecular_prediction.models.base import BaseGNN
+from src.molecular_prediction.models.base import BaseGNN
 
 NODE_FEATURE_DIM: int = 11
 

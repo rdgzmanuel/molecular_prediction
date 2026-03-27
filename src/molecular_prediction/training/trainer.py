@@ -10,9 +10,9 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
-from molecular_prediction.models.base import BaseGNN
-from molecular_prediction.training.early_stopping import EarlyStopping
-from molecular_prediction.training.utils import save_parameters
+from src.molecular_prediction.models.base import BaseGNN
+from src.molecular_prediction.training.early_stopping import EarlyStopping
+from src.molecular_prediction.training.utils import save_parameters
 
 
 class Trainer:
