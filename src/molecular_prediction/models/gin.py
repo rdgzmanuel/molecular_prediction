@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv
 
-from molecular_prediction.models.base import BaseGNN
+from src.molecular_prediction.models.base import BaseGNN
 
 NODE_FEATURE_DIM: int = 11
 

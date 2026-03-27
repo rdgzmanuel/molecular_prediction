@@ -5,7 +5,7 @@ from torch_geometric.data import Dataset
 from torch_geometric.datasets import QM9
 
 from configs.config import Config
-from molecular_prediction.data.transforms import NormaliseTargets
+from src.molecular_prediction.data.transforms import NormaliseTargets
 
 
 def compute_normalisation_stats(

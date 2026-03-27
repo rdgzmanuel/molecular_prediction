@@ -4,7 +4,7 @@
 import numpy as np
 from torch import nn
 
-from molecular_prediction.training.utils import save_parameters
+from src.molecular_prediction.training.utils import save_parameters
 
 
 class EarlyStopping:
