@@ -11,6 +11,7 @@ import os
 
 import matplotlib.pyplot as plt
 import torch
+from torch import nn
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
@@ -22,7 +23,6 @@ from src.molecular_prediction.experiments.main_comparison import (
     build_model,
 )
 from src.molecular_prediction.models.base import BaseGNN
-from src.molecular_prediction.training.metrics import mae_per_target
 
 # Noise levels (sigma) to sweep over
 DEFAULT_SIGMA_VALUES: list[float] = [0.0, 0.1, 0.25, 0.5, 1.0]
@@ -117,14 +117,15 @@ def evaluate_model_under_noise(
 
     maes: list[float] = []
     n_batches: int = 0
+    criterion: nn.L1Loss = nn.L1Loss()
 
     with torch.no_grad():
         for batch in loader:
             batch = batch.to(device)
             output: torch.Tensor = model(batch)
             targets: torch.Tensor = batch.y[:, target_indices]
-            loss: torch.Tensor = mae_per_target(output, targets)
-            maes.append(loss)
+            loss: torch.Tensor = criterion(output, targets)
+            maes.append(loss.item())
             n_batches += 1
 
     mean_mae: float = sum(maes) / n_batches
@@ -137,7 +138,7 @@ def evaluate_model_under_noise(
 
 def run_noise_ablation_for_model(
     model_name: str,
-    config: dict,
+    config: Config,
     test_dataset: Dataset,
     sigma_values: list[float],
     device: str,
@@ -172,7 +173,7 @@ def run_noise_ablation_for_model(
 
 
 def run_noise_ablation(
-    config: dict,
+    config: Config,
     device: str,
     sigma_values: list[float] = DEFAULT_SIGMA_VALUES,
 ) -> dict[str, list[dict]]:
