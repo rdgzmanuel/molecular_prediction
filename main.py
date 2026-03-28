@@ -13,12 +13,15 @@ import torch
 from configs.config import Config
 from src.molecular_prediction.experiments.main_comparison import (
     plot_test_mae,
+    plot_test_mae_per_target,
     plot_training_curves,
+    plot_training_curves_per_target,
     run_comparison,
     save_results,
 )
 from src.molecular_prediction.experiments.noise_ablation import (
     plot_ablation_curves,
+    plot_ablation_curves_per_target,
     run_noise_ablation,
     save_ablation_results,
 )
@@ -75,8 +78,8 @@ def select_device(requested: str) -> str:
 def run_main_comparison(config: Config, device: str) -> None:
     """Orchestrate the main model-comparison experiment.
 
-    Calls run_comparison(), then save_results(), plot_training_curves(),
-    and plot_test_mae(). All outputs are saved to disk.
+    Calls run_comparison(), then save_results(), and plots.
+    All outputs are saved to disk.
 
     Args:
         config: Full experiment config dict.
@@ -85,14 +88,16 @@ def run_main_comparison(config: Config, device: str) -> None:
     results: dict = run_comparison(config, device)
     save_results(results, config.paths.results_dir)
     plot_training_curves(results, config.paths.images_dir)
+    plot_training_curves_per_target(results, config.paths.images_dir)
     plot_test_mae(results, config.paths.images_dir)
+    plot_test_mae_per_target(results, config.paths.images_dir)
 
 
 def run_noise_ablation_experiment(config: Config, device: str) -> None:
     """Orchestrate the noise-ablation experiment.
 
     Calls run_noise_ablation(), then save_ablation_results() and
-    plot_ablation_curves(). All outputs are saved to disk.
+    plots. All outputs are saved to disk.
 
     Args:
         config: Full experiment config dict.
@@ -101,6 +106,7 @@ def run_noise_ablation_experiment(config: Config, device: str) -> None:
     results: dict[str, list[dict]] = run_noise_ablation(config, device)
     save_ablation_results(results, config.paths.results_dir)
     plot_ablation_curves(results, config.paths.images_dir)
+    plot_ablation_curves_per_target(results, config.paths.images_dir)
 
 
 def main() -> None:

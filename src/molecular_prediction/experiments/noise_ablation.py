@@ -20,6 +20,7 @@ from src.molecular_prediction.data.dataset import load_splits
 from src.molecular_prediction.data.transforms import AddGaussianNoise
 from src.molecular_prediction.experiments.main_comparison import (
     MODEL_NAMES,
+    TARGET_NAMES,
     build_model,
 )
 from src.molecular_prediction.models.base import BaseGNN
@@ -104,8 +105,9 @@ def evaluate_model_under_noise(
 
     Returns:
         Dict with keys:
-            'sigma'     (float)
-            'test_mae'  (float) – mean MAE over all targets
+            'sigma'              (float)
+            'test_mae'           (float) – mean combined MAE over all targets
+            'test_mae_per_target' (list[float]) – per-target MAEs
     """
     noisy_dataset = apply_noise_to_dataset(test_dataset, sigma)
     batch_size: int = config.training.batch_size
@@ -115,7 +117,8 @@ def evaluate_model_under_noise(
     model.to(device)
     model.eval()
 
-    maes: list[float] = []
+    combined_losses: list[float] = []
+    per_target_losses: list[torch.Tensor] = []
     n_batches: int = 0
     criterion: nn.L1Loss = nn.L1Loss()
 
@@ -125,14 +128,21 @@ def evaluate_model_under_noise(
             output: torch.Tensor = model(batch)
             targets: torch.Tensor = batch.y[:, target_indices]
             loss: torch.Tensor = criterion(output, targets)
-            maes.append(loss.item())
+            combined_losses.append(loss.item())
+
+            batch_per_target: torch.Tensor = torch.abs(output - targets).mean(dim=0)
+            per_target_losses.append(batch_per_target.cpu())
             n_batches += 1
 
-    mean_mae: float = sum(maes) / n_batches
+    mean_mae: float = sum(combined_losses) / n_batches
+
+    stacked: torch.Tensor = torch.stack(per_target_losses)
+    mean_per_target: list[float] = stacked.mean(dim=0).tolist()
 
     return {
         "sigma": sigma,
         "test_mae": mean_mae,
+        "test_mae_per_target": mean_per_target,
     }
 
 
@@ -221,21 +231,20 @@ def save_ablation_results(results: dict[str, list[dict]], output_dir: str) -> No
 def print_ablation_table(results: dict[str, list[dict]]) -> None:
     """Print a formatted table of test MAE vs noise level for all models.
 
-    Rows: sigma values. Columns: model names.
+    Shows combined MAE first, then a separate table for each target.
 
     Args:
         results: Dict mapping model name -> list of per-sigma result dicts.
     """
     model_names: list[str] = list(results.keys())
-
-    # Header
-    header: str = f"{'sigma':<10}" + "".join(f"{n:>12}" for n in model_names)
-    print(f"\n{header}")
-    print("-" * len(header))
-
-    # Assume all models evaluated at the same sigma values
     first_model: str = model_names[0]
     n_sigmas: int = len(results[first_model])
+
+    # Combined table
+    header: str = f"{'sigma':<10}" + "".join(f"{n:>12}" for n in model_names)
+    print("\nCombined MAE")
+    print(header)
+    print("-" * len(header))
 
     for i in range(n_sigmas):
         sigma: float = results[first_model][i]["sigma"]
@@ -245,11 +254,25 @@ def print_ablation_table(results: dict[str, list[dict]]) -> None:
             row += f"{mae:>12.4f}"
         print(row)
 
+    # Per-target tables
+    for t_idx, target_name in enumerate(TARGET_NAMES):
+        print(f"\nMAE — {target_name}")
+        print(header)
+        print("-" * len(header))
+
+        for i in range(n_sigmas):
+            sigma = results[first_model][i]["sigma"]
+            row = f"{sigma:<10.2f}"
+            for name in model_names:
+                mae = results[name][i]["test_mae_per_target"][t_idx]
+                row += f"{mae:>12.4f}"
+            print(row)
+
     print()
 
 
 def plot_ablation_curves(results: dict[str, list[dict]], output_dir: str) -> None:
-    """Plot test MAE vs noise level for all models.
+    """Plot combined test MAE vs noise level for all models.
 
     Saves the figure to '{output_dir}/noise_ablation_curves.png'.
 
@@ -270,7 +293,7 @@ def plot_ablation_curves(results: dict[str, list[dict]], output_dir: str) -> Non
 
     ax.set_xlabel("Noise σ (Å)")
     ax.set_ylabel("Test MAE")
-    ax.set_title("Noise Robustness Ablation")
+    ax.set_title("Noise Robustness Ablation (Combined)")
     ax.legend()
     ax.grid(True, alpha=0.3)
 
@@ -279,3 +302,42 @@ def plot_ablation_curves(results: dict[str, list[dict]], output_dir: str) -> Non
     fig.savefig(filepath, dpi=150)
     plt.close(fig)
     print(f"Ablation curves saved to {filepath}")
+
+
+def plot_ablation_curves_per_target(
+    results: dict[str, list[dict]], output_dir: str
+) -> None:
+    """Plot per-target test MAE vs noise level for all models.
+
+    One figure per target, saved as '{output_dir}/noise_ablation_{target}.png'.
+
+    Args:
+        results: Dict mapping model name -> list of per-sigma result dicts.
+        output_dir: Directory where the plots will be saved.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    colors: list[str] = ["#4C72B0", "#55A868", "#C44E52"]
+    model_names: list[str] = list(results.keys())
+
+    for t_idx, target_name in enumerate(TARGET_NAMES):
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        for m_idx, model_name in enumerate(model_names):
+            res_list: list[dict] = results[model_name]
+            sigmas: list[float] = [r["sigma"] for r in res_list]
+            maes: list[float] = [r["test_mae_per_target"][t_idx] for r in res_list]
+            color: str = colors[m_idx % len(colors)]
+            ax.plot(sigmas, maes, marker="o", label=model_name, color=color)
+
+        ax.set_xlabel("Noise σ (Å)")
+        ax.set_ylabel("Test MAE")
+        ax.set_title(f"Noise Robustness — {target_name}")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        filepath: str = os.path.join(output_dir, f"noise_ablation_{target_name}.png")
+        fig.savefig(filepath, dpi=150)
+        plt.close(fig)
+        print(f"Per-target ablation curves saved to {filepath}")
