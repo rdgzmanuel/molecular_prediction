@@ -51,7 +51,7 @@ class TrainingConfig:
 
     lr: float = 1e-3
     batch_size: int = 32
-    epochs: int = 1
+    epochs: int = 150
     patience: int = 80
     delta: float = 1e-4
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR
