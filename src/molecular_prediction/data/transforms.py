@@ -56,7 +56,7 @@ class AddGaussianNoise:
         Returns:
             Data object with perturbed coordinates.
         """
-        noise: torch.Tensor = torch.rand_like(data.pos) * self.sigma
+        noise: torch.Tensor = torch.randn_like(data.pos) * self.sigma
         data.pos = data.pos + noise
 
         return data
