@@ -12,7 +12,7 @@ import os
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
-from torch_geometric.data import Dataset
+from torch_geometric.data import Data, Dataset
 from torch_geometric.loader import DataLoader
 
 from configs.config import Config
@@ -72,19 +72,17 @@ def apply_noise_to_dataset(test_dataset: Dataset, sigma: float) -> Dataset:
         Dataset (or wrapped dataset) with noisy coordinates.
     """
     if sigma == 0.0:
-        return test_dataset
+        return [test_dataset[i] for i in range(len(test_dataset))]
 
     transform: AddGaussianNoise = AddGaussianNoise(sigma=sigma)
 
-    # Apply transform to each data object in a copy-safe way.
-    # We wrap the dataset so the original stays clean.
     noisy_data: list = []
     for i in range(len(test_dataset)):
-        data = test_dataset[i].clone()
+        data: Data = test_dataset[i].clone()
         data = transform(data)
         noisy_data.append(data)
 
-    return noisy_data  # type: ignore[return-value]  # DataLoader accepts list of Data
+    return noisy_data
 
 
 def evaluate_model_under_noise(

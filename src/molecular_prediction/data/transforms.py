@@ -20,7 +20,8 @@ class NormaliseTargets:
         self.target_indices: list[int] = target_indices
 
     def __call__(self, data: Data) -> Data:
-        """Normalise the targets of a single molecule.
+        """
+        Normalise the targets of a single molecule.
 
         Args:
             data: PyG Data object for a single molecule.
@@ -28,11 +29,11 @@ class NormaliseTargets:
         Returns:
             Data object with normalised targets.
         """
+        data = data.clone()
         for idx in self.target_indices:
             data.y[0, idx] = (data.y[0, idx] - self.stats[idx]["mean"]) / (
                 self.stats[idx]["std"] + 1e-6
             )
-
         return data
 
 
