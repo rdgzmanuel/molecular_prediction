@@ -11,6 +11,13 @@ import argparse
 import torch
 
 from configs.config import Config
+from src.molecular_prediction.experiments.curvature_analysis import (
+    plot_curvature_distribution,
+    plot_mae_by_quartile,
+    plot_relative_improvement,
+    run_curvature_analysis,
+    save_curvature_results,
+)
 from src.molecular_prediction.experiments.main_comparison import (
     plot_test_mae,
     plot_test_mae_per_target,
@@ -42,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--experiment",
         type=str,
-        choices=["main_comparison", "noise_ablation"],
+        choices=["main_comparison", "noise_ablation", "curvature_analysis"],
         default="main_comparison",
         help="Which experiment to run.",
     )
@@ -109,6 +116,31 @@ def run_noise_ablation_experiment(config: Config, device: str) -> None:
     plot_ablation_curves_per_target(results, config.paths.images_dir)
 
 
+def run_curvature_experiment(config: Config, device: str) -> None:
+    """Orchestrate the curvature-based over-squashing analysis.
+
+    Evaluates all models per-molecule, computes Ollivier-Ricci curvature,
+    assigns bottleneck quartiles, and produces all plots.
+
+    Args:
+        config: Full experiment config dict.
+        device: PyTorch device string.
+    """
+    results: dict = run_curvature_analysis(config, device)
+    save_curvature_results(results, config.paths.results_dir)
+    plot_curvature_distribution(results["curvature_stats"], config.paths.images_dir)
+    plot_mae_by_quartile(
+        results["mae_by_quartile"],
+        results["quartile_sizes"],
+        config.paths.images_dir,
+    )
+    plot_relative_improvement(
+        results["mae_by_quartile"],
+        results["quartile_sizes"],
+        config.paths.images_dir,
+    )
+
+
 def main() -> None:
     """Parse arguments, load config, and dispatch to the chosen experiment."""
     args: argparse.Namespace = parse_args()
@@ -122,6 +154,8 @@ def main() -> None:
         run_main_comparison(config, device)
     elif args.experiment == "noise_ablation":
         run_noise_ablation_experiment(config, device)
+    elif args.experiment == "curvature_analysis":
+        run_curvature_experiment(config, device)
     else:
         raise ValueError(f"Unknown experiment: {args.experiment}")
 
