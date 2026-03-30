@@ -13,11 +13,8 @@ import os
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import ot
 import torch
-from GraphRicciCurvature.OllivierRicci import OllivierRicci
-from src.molecular_prediction.experiments.per_molecule_eval import (
-    run_per_molecule_evaluation,
-)
 from torch_geometric.data import Dataset
 
 from configs.config import Config
@@ -25,6 +22,9 @@ from src.molecular_prediction.data.dataset import load_splits
 from src.molecular_prediction.experiments.main_comparison import (
     MODEL_NAMES,
     TARGET_NAMES,
+)
+from src.molecular_prediction.experiments.per_molecule_eval import (
+    run_per_molecule_evaluation,
 )
 
 # Default threshold: edges with curvature below this are considered bottlenecks
@@ -54,11 +54,51 @@ def pyg_to_networkx(edge_index: torch.Tensor, num_nodes: int) -> nx.Graph:
     return g
 
 
+def _node_distribution(
+    g: nx.Graph,
+    node: int,
+    alpha: float,
+) -> tuple[list[int], np.ndarray]:
+    """Build the lazy random walk distribution centred at a node.
+
+    Places mass alpha on the node itself and distributes (1 - alpha)
+    uniformly among its neighbours.
+
+    Args:
+        g: Undirected NetworkX graph.
+        node: Centre node.
+        alpha: Laziness parameter (mass on the node itself).
+
+    Returns:
+        Tuple of (support nodes as list, probability weights as array).
+    """
+    neighbours: list[int] = list(g.neighbors(node))
+    deg: int = len(neighbours)
+
+    if deg == 0:
+        return [node], np.array([1.0])
+
+    support: list[int] = [node] + neighbours
+    weights: np.ndarray = np.zeros(len(support))
+    weights[0] = alpha
+    weights[1:] = (1.0 - alpha) / deg
+
+    return support, weights
+
+
 def compute_ollivier_ricci_curvature(
     g: nx.Graph,
     alpha: float = 0.5,
 ) -> dict[tuple[int, int], float]:
     """Compute Ollivier-Ricci curvature for every edge in the graph.
+
+    For each edge (u, v), builds lazy random walk distributions mu_u and mu_v,
+    computes the Wasserstein-1 distance W(mu_u, mu_v) using the shortest-path
+    metric, and returns kappa(u,v) = 1 - W(mu_u, mu_v) / d(u,v).
+
+    Since the graph is unweighted, d(u,v) = 1 for all edges.
+
+    Uses the POT library (Python Optimal Transport) for the EMD computation.
 
     Args:
         g: Undirected NetworkX graph.
@@ -71,12 +111,46 @@ def compute_ollivier_ricci_curvature(
     if g.number_of_edges() == 0:
         return {}
 
-    orc: OllivierRicci = OllivierRicci(g, alpha=alpha)
-    orc.compute_ricci_curvature()
+    # Precompute all-pairs shortest paths (cheap for small molecular graphs)
+    nodes: list[int] = list(g.nodes())
+    node_to_idx: dict[int, int] = {n: i for i, n in enumerate(nodes)}
+    n: int = len(nodes)
+
+    sp_lengths: dict[int, dict[int, int]] = dict(nx.all_pairs_shortest_path_length(g))
+
+    # Build full distance matrix
+    dist_matrix: np.ndarray = np.zeros((n, n))
+    for i, ni in enumerate(nodes):
+        for j, nj in enumerate(nodes):
+            if ni in sp_lengths and nj in sp_lengths[ni]:
+                dist_matrix[i, j] = float(sp_lengths[ni][nj])
+            else:
+                # Disconnected components — shouldn't happen in molecules
+                dist_matrix[i, j] = float(n)
 
     curvatures: dict[tuple[int, int], float] = {}
-    for u, v, data in orc.G.edges(data=True):
-        curvatures[(u, v)] = data["ricciCurvature"]
+
+    for u, v in g.edges():
+        # Build distributions
+        support_u: list[int]
+        weights_u: np.ndarray
+        support_u, weights_u = _node_distribution(g, u, alpha)
+
+        support_v: list[int]
+        weights_v: np.ndarray
+        support_v, weights_v = _node_distribution(g, v, alpha)
+
+        # Build cost matrix between supports using precomputed shortest paths
+        idx_u: list[int] = [node_to_idx[s] for s in support_u]
+        idx_v: list[int] = [node_to_idx[s] for s in support_v]
+        cost: np.ndarray = dist_matrix[np.ix_(idx_u, idx_v)]
+
+        # Compute Wasserstein-1 distance via EMD
+        wasserstein: float = float(ot.emd2(weights_u, weights_v, cost))
+
+        # d(u, v) = 1 for unweighted graphs
+        kappa: float = 1.0 - wasserstein
+        curvatures[(u, v)] = kappa
 
     return curvatures
 
