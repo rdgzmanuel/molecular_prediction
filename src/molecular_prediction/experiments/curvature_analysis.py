@@ -239,39 +239,31 @@ def compute_curvature_stats_for_dataset(
     }
 
 
-def assign_quartiles(scores: list[float]) -> np.ndarray:
-    """Assign each molecule to a quartile based on bottleneck score.
+def assign_quartiles(min_curvatures: list[float]) -> np.ndarray:
+    """Assign each molecule to a quartile based on minimum edge curvature.
 
-    Quartile 0 = lowest bottleneck (least over-squashing risk).
-    Quartile 3 = highest bottleneck (most over-squashing risk).
+    Uses the minimum Ollivier-Ricci curvature per molecule as the ranking
+    variable. Lower (more negative) curvature means more topological
+    bottleneck, so:
+        Q0 = highest min-curvature (least bottleneck)
+        Q3 = lowest min-curvature (most bottleneck)
 
-    Molecules with score == 0.0 are always in quartile 0.
-    Remaining molecules are split into quartiles by percentile.
+    Quartile boundaries are defined by the 25th, 50th, and 75th percentiles.
 
     Args:
-        scores: List of bottleneck scores, one per molecule.
+        min_curvatures: List of minimum edge curvatures, one per molecule.
 
     Returns:
         Array of quartile assignments (0–3), shape [N].
     """
-    arr: np.ndarray = np.array(scores)
-    quartiles: np.ndarray = np.zeros(len(arr), dtype=int)
+    arr: np.ndarray = np.array(min_curvatures)
 
-    # Many molecules may have score 0 (no bottleneck edges),
-    # so we use quantile-based binning on nonzero scores.
-    nonzero_mask: np.ndarray = arr > 0.0
-
-    if nonzero_mask.sum() == 0:
-        return quartiles
-
-    nonzero_scores: np.ndarray = arr[nonzero_mask]
-    # Molecules with score 0 stay in quartile 0.
-    # Split nonzero into 3 bins (quartiles 1–3).
-    percentiles: list[float] = [33.3, 66.7]
-    bins: np.ndarray = np.percentile(nonzero_scores, percentiles)
-
-    nonzero_quartiles: np.ndarray = np.digitize(nonzero_scores, bins) + 1  # 1, 2, or 3
-    quartiles[nonzero_mask] = nonzero_quartiles
+    # Negate so that more negative curvature -> higher value -> higher quartile
+    negated: np.ndarray = -arr
+    bins: np.ndarray = np.percentile(negated, [25, 50, 75])
+    quartiles: np.ndarray = np.digitize(negated, bins).astype(int)
+    # np.digitize returns 0..3; clip just in case
+    quartiles = np.clip(quartiles, 0, 3)
 
     return quartiles
 
@@ -327,7 +319,7 @@ def run_curvature_analysis(
     Steps:
         1. Evaluate all models per-molecule on the test set.
         2. Compute Ollivier-Ricci curvature for each test molecule.
-        3. Assign quartiles by bottleneck score.
+        3. Assign quartiles by minimum edge curvature.
         4. Compute MAE per quartile per model.
 
     Args:
@@ -356,8 +348,8 @@ def run_curvature_analysis(
     )
 
     # Step 3: quartile assignment
-    print("\n=== Step 3: Assigning quartiles ===")
-    quartiles: np.ndarray = assign_quartiles(curvature_stats["bottleneck_scores"])
+    print("\n=== Step 3: Assigning quartiles by minimum curvature ===")
+    quartiles: np.ndarray = assign_quartiles(curvature_stats["min_curvatures"])
     quartile_sizes: list[int] = [int((quartiles == q).sum()) for q in range(4)]
     print(f"  Quartile sizes: {quartile_sizes}")
 
@@ -390,7 +382,7 @@ def print_quartile_table(
     quartile_labels: list[str] = [f"Q{q} (n={quartile_sizes[q]})" for q in range(4)]
 
     # Combined MAE
-    print(f"\n{'Combined MAE by Bottleneck Quartile':}")
+    print(f"\n{'Combined MAE by Min Curvature Quartile':}")
     header: str = f"{'Quartile':<20}" + "".join(f"{m:>12}" for m in MODEL_NAMES)
     print(header)
     print("-" * len(header))
@@ -403,7 +395,7 @@ def print_quartile_table(
 
     # Per-target tables
     for tname in TARGET_NAMES:
-        print(f"\n{tname} MAE by Bottleneck Quartile:")
+        print(f"\n{tname} MAE by Min Curvature Quartile:")
         print(header)
         print("-" * len(header))
         for q in range(4):
@@ -444,7 +436,7 @@ def plot_mae_by_quartile(
     quartile_sizes: list[int],
     output_dir: str,
 ) -> None:
-    """Plot grouped bar charts of MAE by bottleneck quartile.
+    """Plot grouped bar charts of MAE by min curvature quartile.
 
     Produces one figure for combined MAE and one per target.
 
@@ -466,9 +458,9 @@ def plot_mae_by_quartile(
         vals: list[float] = mae_by_quartile[model_name]["combined"]
         ax.bar(x + i * width, vals, width, label=model_name, color=colors[i])
 
-    ax.set_xlabel("Bottleneck Quartile (Q0=low, Q3=high)")
+    ax.set_xlabel("Min Curvature Quartile (Q0=least negative, Q3=most negative)")
     ax.set_ylabel("Mean MAE")
-    ax.set_title("Combined MAE by Bottleneck Quartile")
+    ax.set_title("Combined MAE by Min Curvature Quartile")
     ax.set_xticks(x + width)
     ax.set_xticklabels(quartile_labels)
     ax.legend()
@@ -486,9 +478,9 @@ def plot_mae_by_quartile(
             vals = mae_by_quartile[model_name][tname]
             ax.bar(x + i * width, vals, width, label=model_name, color=colors[i])
 
-        ax.set_xlabel("Bottleneck Quartile (Q0=low, Q3=high)")
+        ax.set_xlabel("Min Curvature Quartile (Q0=least negative, Q3=most negative)")
         ax.set_ylabel("Mean MAE")
-        ax.set_title(f"{tname} MAE by Bottleneck Quartile")
+        ax.set_title(f"{tname} MAE by Min Curvature Quartile")
         ax.set_xticks(x + width)
         ax.set_xticklabels(quartile_labels)
         ax.legend()
@@ -577,7 +569,7 @@ def plot_relative_improvement(
                 improvements.append(0.0)
 
         bars = ax.bar(range(4), improvements, color="#C44E52", alpha=0.8)
-        ax.set_xlabel("Bottleneck Quartile")
+        ax.set_xlabel("Min Curvature Quartile")
         ax.set_ylabel("Relative Improvement (%)")
         ax.set_title(f"{tname}")
         ax.set_xticks(range(4))
