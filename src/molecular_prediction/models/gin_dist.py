@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
-from torch_geometric.nn import GINEConv
+from torch_geometric.nn import GINEConv, global_add_pool
 
 from src.molecular_prediction.models.base import BaseGNN
 
@@ -100,7 +100,9 @@ class GINDist(BaseGNN):
         """
         distances: torch.Tensor = self._compute_distances(data.pos, data.edge_index)
         enriched_edge_attr: torch.Tensor = torch.cat([data.edge_attr, distances], dim=1)
+        embedded_edge_attr: torch.Tensor = self.edge_embedding(enriched_edge_attr)
 
-        data.edge_attr = self.edge_embedding(enriched_edge_attr)
-
-        return super().forward(data)
+        h: torch.Tensor = self.node_embedding(data.x)
+        h = self.message_pass(h, data.edge_index, embedded_edge_attr)
+        graph_repr: torch.Tensor = global_add_pool(h, data.batch)
+        return self.prediction_head(graph_repr)
