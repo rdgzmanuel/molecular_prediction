@@ -28,6 +28,9 @@ from src.molecular_prediction.models.base import BaseGNN
 # Noise levels (sigma) to sweep over
 DEFAULT_SIGMA_VALUES: list[float] = [0.0, 0.1, 0.25, 0.5, 1.0]
 
+# Sigma cutoff for the main (linear-scale) plots
+MAIN_PLOT_MAX_SIGMA: float = 0.5
+
 
 def load_model(model_name: str, config: Config) -> BaseGNN:
     """Load a pretrained model from its checkpoint file.
@@ -58,18 +61,19 @@ def load_model(model_name: str, config: Config) -> BaseGNN:
     return model
 
 
-def apply_noise_to_dataset(test_dataset: Dataset, sigma: float) -> Dataset:
+def apply_noise_to_dataset(test_dataset: Dataset, sigma: float) -> list:
     """Return a version of test_dataset with Gaussian noise added to coordinates.
 
     Uses AddGaussianNoise transform from molecular_prediction.data.transforms.
-    When sigma == 0.0, no noise is added and the original dataset is returned.
+    When sigma == 0.0, no noise is added but the dataset is still materialised
+    into a list for consistency.
 
     Args:
         test_dataset: Clean test split.
         sigma: Standard deviation of the noise in Angstroms.
 
     Returns:
-        Dataset (or wrapped dataset) with noisy coordinates.
+        List of Data objects (optionally with noisy coordinates).
     """
     if sigma == 0.0:
         return [test_dataset[i] for i in range(len(test_dataset))]
@@ -107,9 +111,9 @@ def evaluate_model_under_noise(
             'test_mae'           (float) – mean combined MAE over all targets
             'test_mae_per_target' (list[float]) – per-target MAEs
     """
-    noisy_dataset = apply_noise_to_dataset(test_dataset, sigma)
+    noisy_dataset: list = apply_noise_to_dataset(test_dataset, sigma)
     batch_size: int = config.training.batch_size
-    target_indices: list[int] = config.data.target_indices
+    target_indices: list[int] = list(config.data.target_indices)
     loader: DataLoader = DataLoader(noisy_dataset, batch_size=batch_size)
 
     model.to(device)
@@ -269,17 +273,41 @@ def print_ablation_table(results: dict[str, list[dict]]) -> None:
     print()
 
 
-def plot_ablation_curves(results: dict[str, list[dict]], output_dir: str) -> None:
-    """Plot combined test MAE vs noise level for all models.
-
-    Saves the figure to '{output_dir}/noise_ablation_curves.png'.
+def _filter_results_by_sigma(
+    results: dict[str, list[dict]],
+    max_sigma: float,
+) -> dict[str, list[dict]]:
+    """Filter results to include only sigma values up to max_sigma.
 
     Args:
-        results: Dict mapping model name -> list of per-sigma result dicts.
-        output_dir: Directory where the plot will be saved.
-    """
-    os.makedirs(output_dir, exist_ok=True)
+        results: Full results dict.
+        max_sigma: Maximum sigma to include (inclusive).
 
+    Returns:
+        Filtered results dict with same structure.
+    """
+    filtered: dict[str, list[dict]] = {}
+    for model_name, res_list in results.items():
+        filtered[model_name] = [r for r in res_list if r["sigma"] <= max_sigma]
+    return filtered
+
+
+def _plot_ablation_combined(
+    results: dict[str, list[dict]],
+    output_dir: str,
+    filename: str,
+    title_suffix: str,
+    log_scale: bool,
+) -> None:
+    """Plot combined test MAE vs noise level for all models.
+
+    Args:
+        results: Results dict (possibly filtered).
+        output_dir: Directory where the plot will be saved.
+        filename: Output filename.
+        title_suffix: Appended to the plot title.
+        log_scale: Whether to use logarithmic Y axis.
+    """
     fig, ax = plt.subplots(figsize=(8, 5))
 
     colors: list[str] = ["#4C72B0", "#55A868", "#C44E52"]
@@ -291,30 +319,35 @@ def plot_ablation_curves(results: dict[str, list[dict]], output_dir: str) -> Non
 
     ax.set_xlabel("Noise σ (Å)")
     ax.set_ylabel("Test MAE")
-    ax.set_title("Noise Robustness Ablation (Combined)")
+    ax.set_title(f"Noise Robustness Ablation (Combined){title_suffix}")
+    if log_scale:
+        ax.set_yscale("log")
     ax.legend()
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    filepath: str = os.path.join(output_dir, "noise_ablation_curves.png")
+    filepath: str = os.path.join(output_dir, filename)
     fig.savefig(filepath, dpi=150)
     plt.close(fig)
     print(f"Ablation curves saved to {filepath}")
 
 
-def plot_ablation_curves_per_target(
-    results: dict[str, list[dict]], output_dir: str
+def _plot_ablation_per_target(
+    results: dict[str, list[dict]],
+    output_dir: str,
+    filename_template: str,
+    title_suffix: str,
+    log_scale: bool,
 ) -> None:
     """Plot per-target test MAE vs noise level for all models.
 
-    One figure per target, saved as '{output_dir}/noise_ablation_{target}.png'.
-
     Args:
-        results: Dict mapping model name -> list of per-sigma result dicts.
-        output_dir: Directory where the plots will be saved.
+        results: Results dict (possibly filtered).
+        output_dir: Directory where plots will be saved.
+        filename_template: Filename template with {target} placeholder.
+        title_suffix: Appended to the plot title.
+        log_scale: Whether to use logarithmic Y axis.
     """
-    os.makedirs(output_dir, exist_ok=True)
-
     colors: list[str] = ["#4C72B0", "#55A868", "#C44E52"]
     model_names: list[str] = list(results.keys())
 
@@ -330,12 +363,92 @@ def plot_ablation_curves_per_target(
 
         ax.set_xlabel("Noise σ (Å)")
         ax.set_ylabel("Test MAE")
-        ax.set_title(f"Noise Robustness — {target_name}")
+        ax.set_title(f"Noise Robustness — {target_name}{title_suffix}")
+        if log_scale:
+            ax.set_yscale("log")
         ax.legend()
         ax.grid(True, alpha=0.3)
 
         fig.tight_layout()
-        filepath: str = os.path.join(output_dir, f"noise_ablation_{target_name}.png")
+        filepath: str = os.path.join(
+            output_dir, filename_template.format(target=target_name)
+        )
         fig.savefig(filepath, dpi=150)
         plt.close(fig)
         print(f"Per-target ablation curves saved to {filepath}")
+
+
+def plot_ablation_curves(results: dict[str, list[dict]], output_dir: str) -> None:
+    """Plot main combined noise ablation curves (sigma <= 0.5, linear scale).
+
+    Args:
+        results: Full results dict.
+        output_dir: Directory where the plot will be saved.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    filtered: dict[str, list[dict]] = _filter_results_by_sigma(
+        results, MAIN_PLOT_MAX_SIGMA
+    )
+    _plot_ablation_combined(
+        filtered, output_dir, "noise_ablation_curves.png", "", log_scale=False
+    )
+
+
+def plot_ablation_curves_per_target(
+    results: dict[str, list[dict]], output_dir: str
+) -> None:
+    """Plot main per-target noise ablation curves (sigma <= 0.5, linear scale).
+
+    Args:
+        results: Full results dict.
+        output_dir: Directory where plots will be saved.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    filtered: dict[str, list[dict]] = _filter_results_by_sigma(
+        results, MAIN_PLOT_MAX_SIGMA
+    )
+    _plot_ablation_per_target(
+        filtered,
+        output_dir,
+        "noise_ablation_{target}.png",
+        "",
+        log_scale=False,
+    )
+
+
+def plot_ablation_curves_log(results: dict[str, list[dict]], output_dir: str) -> None:
+    """Plot supplementary combined noise ablation curves (all sigmas, log scale).
+
+    Includes all sigma values to show divergence behaviour at high noise.
+
+    Args:
+        results: Full results dict.
+        output_dir: Directory where the plot will be saved.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    _plot_ablation_combined(
+        results,
+        output_dir,
+        "noise_ablation_curves_log.png",
+        " — Log Scale",
+        log_scale=True,
+    )
+
+
+def plot_ablation_curves_per_target_log(
+    results: dict[str, list[dict]], output_dir: str
+) -> None:
+    """Plot supplementary per-target noise ablation curves (all sigmas, log scale).
+
+    Args:
+        results: Full results dict.
+        output_dir: Directory where plots will be saved.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    _plot_ablation_per_target(
+        results,
+        output_dir,
+        "noise_ablation_{target}_log.png",
+        " — Log Scale",
+        log_scale=True,
+    )
