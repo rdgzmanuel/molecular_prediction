@@ -28,9 +28,7 @@ from src.molecular_prediction.experiments.main_comparison import (
 )
 from src.molecular_prediction.experiments.noise_ablation import (
     plot_ablation_curves,
-    plot_ablation_curves_log,
     plot_ablation_curves_per_target,
-    plot_ablation_curves_per_target_log,
     run_noise_ablation,
     save_ablation_results,
 )
@@ -116,8 +114,6 @@ def run_noise_ablation_experiment(config: Config, device: str) -> None:
     save_ablation_results(results, config.paths.results_dir)
     plot_ablation_curves(results, config.paths.images_dir)
     plot_ablation_curves_per_target(results, config.paths.images_dir)
-    plot_ablation_curves_log(results, config.paths.images_dir)
-    plot_ablation_curves_per_target_log(results, config.paths.images_dir)
 
 
 def run_curvature_experiment(config: Config, device: str) -> None:
