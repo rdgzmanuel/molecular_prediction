@@ -7,10 +7,10 @@ requires-python = ">=3.11"
 dependencies = [
     "torch",
     "torch-geometric",
-    "pyyaml",
     "tensorboard",
-    "matplotlib>=3.10.8",
-    "graphriccicurvature>=0.5.3.2",
+    "matplotlib",
+    "networkx",
+    "pot",
 ]
 
 [dependency-groups]
