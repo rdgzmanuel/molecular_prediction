@@ -2,6 +2,8 @@
 
 <p align="center">
   <img src="assets/molecule.png" width="300">
+  <br>
+  <em>Image source: <a href="https://https://www.researchgate.net/publication/377508996_Mode_Collapse_Alleviation_of_Reinforcement_Learning-based_GANs_in_Drug_Design">ResearchGate</a></em>
 </p>
 
 This project compares three graph neural network architectures for molecular property prediction on the QM9 dataset, each incorporating 3D geometric information to a different degree. The goal is to study how geometric awareness affects predictive performance, robustness to noise, and resilience to topological bottlenecks in molecular graphs.
